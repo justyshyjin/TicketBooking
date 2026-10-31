@@ -2,9 +2,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export async function initializeDatabase(
-    db: SQLiteDatabase,
+  db: SQLiteDatabase,
 ): Promise<void> {
-    await db.execAsync(`
+  await db.execAsync(`
     PRAGMA foreign_keys = ON;
 
     CREATE TABLE IF NOT EXISTS customers (
@@ -137,5 +137,38 @@ export async function initializeDatabase(
       FOREIGN KEY (booking_id) REFERENCES bookings(id)
         ON DELETE SET NULL
     );
+        CREATE TABLE IF NOT EXISTS operating_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'OTHER',
+      payee TEXT,
+      amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+      payment_status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (payment_status IN ('PENDING', 'PAID')),
+      payment_method TEXT
+        CHECK (
+          payment_method IS NULL OR
+          payment_method IN (
+            'CASH', 'UPI', 'BANK_TRANSFER', 'CARD', 'OTHER'
+          )
+        ),
+      expense_date TEXT NOT NULL,
+      payment_date TEXT,
+      transaction_reference TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      ),
+      updated_at TEXT NOT NULL DEFAULT (
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      )
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_operating_expenses_date
+      ON operating_expenses(expense_date);
+
+    CREATE INDEX IF NOT EXISTS idx_operating_expenses_status
+      ON operating_expenses(payment_status);
   `);
+
 }

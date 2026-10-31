@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import { Ionicons } from '@expo/vector-icons';
 
 type Customer = {
   id: number;
@@ -398,12 +399,17 @@ export default function BookingsScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
         >
-          <Pressable
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backText}>‹  Back</Text>
-          </Pressable>
+          <View style={styles.headerButtons}>
+            <Pressable
+              onPress={() => router.replace('/')}
+              style={styles.homeButton}
+            >
+              <Ionicons name="home" size={22} color="#2563eb" />
+            </Pressable>
+            <Pressable onPress={() => router.back()}>
+              <Text style={styles.back}>‹ Back</Text>
+            </Pressable>
+          </View>
 
           <Text style={styles.title}>Booking Management</Text>
           <Text style={styles.subtitle}>

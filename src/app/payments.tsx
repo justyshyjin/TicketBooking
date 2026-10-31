@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { Ionicons } from '@expo/vector-icons';
 
 type Booking = {
   id: number;
@@ -264,9 +265,17 @@ export default function PaymentsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>‹ Back</Text>
-        </Pressable>
+        <View style={styles.headerButtons}>
+          <Pressable
+            onPress={() => router.replace('/')}
+            style={styles.homeButton}
+          >
+            <Ionicons name="home" size={22} color="#2563eb" />
+          </Pressable>
+          <Pressable onPress={() => router.back()}>
+            <Text style={styles.back}>‹ Back</Text>
+          </Pressable>
+        </View>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.brand}>TICKET DESK</Text>
           <Text style={styles.headerSubtitle}>Payments · Offline</Text>

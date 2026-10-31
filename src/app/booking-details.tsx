@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { Ionicons } from '@expo/vector-icons';
 
 type BookingDetails = {
   id: number;
@@ -366,9 +367,17 @@ export default function BookingDetailsScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>‹  Back to bookings</Text>
-        </Pressable>
+        <View style={styles.headerButtons}>
+          <Pressable
+            onPress={() => router.replace('/')}
+            style={styles.homeButton}
+          >
+            <Ionicons name="home" size={22} color="#2563eb" />
+          </Pressable>
+          <Pressable onPress={() => router.back()}>
+            <Text style={styles.back}>‹ Back</Text>
+          </Pressable>
+        </View>
 
         <Text style={styles.eyebrow}>BOOKING DETAILS</Text>
         <Text style={styles.title}>

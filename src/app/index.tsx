@@ -17,7 +17,6 @@ import {
   View,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { DateField } from '@/components/date-field';
 
 type Customer = {
   id: number;
@@ -33,50 +32,7 @@ type DashboardStats = {
   paymentsReceived: number;
   pendingBalance: number;
   totalExpenses: number;
-  supplierPaid: number;
-  supplierRefunded: number;
-  otherExpenses: number;
 };
-
-type DayRow = {
-  day: string;
-  bookings: number;
-  received: number;
-  refunds: number;
-  expenses: number;
-};
-
-type Period = 'TODAY' | '7D' | '30D' | 'ALL' | 'CUSTOM';
-
-const PERIODS: { value: Period; label: string }[] = [
-  { value: 'TODAY', label: 'Today' },
-  { value: '7D', label: '7 Days' },
-  { value: '30D', label: '30 Days' },
-  { value: 'ALL', label: 'All' },
-  { value: 'CUSTOM', label: 'Custom' },
-];
-
-function localDateValue(date: Date) {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
-function daysAgo(count: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - count);
-  return localDateValue(date);
-}
-
-function displayDay(value: string) {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
 
 const colors = {
   background: '#F5F7FA',
@@ -98,14 +54,7 @@ export default function HomeScreen() {
     paymentsReceived: 0,
     pendingBalance: 0,
     totalExpenses: 0,
-    supplierPaid: 0,
-    supplierRefunded: 0,
-    otherExpenses: 0,
   });
-  const [period, setPeriod] = useState<Period>('7D');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [dayRows, setDayRows] = useState<DayRow[]>([]);
   const [search, setSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -186,36 +135,32 @@ export default function HomeScreen() {
       WHERE b.booking_status != 'CANCELLED'`,
       );
 
-      // Money actually paid out to suppliers, net of supplier refunds.
-      const supplier = await db.getFirstAsync<{
-        paid: number;
-        refunded: number;
-      }>(
-        `SELECT
-           COALESCE(SUM(CASE WHEN payment_type = 'SUPPLIER_PAYMENT'
-                             THEN amount_paise ELSE 0 END), 0) AS paid,
-           COALESCE(SUM(CASE WHEN payment_type = 'SUPPLIER_REFUND'
-                             THEN amount_paise ELSE 0 END), 0) AS refunded
-         FROM payments`,
+      const supplierTotals = await db.getFirstAsync<{ total: number }>(
+        `SELECT COALESCE(SUM(
+          CASE
+            WHEN payment_type = 'SUPPLIER_PAYMENT' THEN amount_paise
+            WHEN payment_type = 'SUPPLIER_REFUND' THEN -amount_paise
+            ELSE 0
+          END
+        ), 0) AS total
+        FROM payments`,
       );
 
-      // Any other costs saved in the expenses table (if the table is used).
-      const other = await db.getFirstAsync<{ total: number }>(
-        'SELECT COALESCE(SUM(amount_paise), 0) AS total FROM expenses',
+      const operatingExpenses = await db.getFirstAsync<{ total: number }>(
+        `SELECT COALESCE(SUM(amount_paise), 0) AS total
+        FROM operating_expenses
+        WHERE payment_status = 'PAID'`,
       );
 
-      const supplierPaid = supplier?.paid ?? 0;
-      const supplierRefunded = supplier?.refunded ?? 0;
-      const otherExpenses = other?.total ?? 0;
+      const totalExpenses =
+        (supplierTotals?.total ?? 0) +
+        (operatingExpenses?.total ?? 0);
 
       setStats({
         totalBookings: bookingCount?.total ?? 0,
         paymentsReceived: paymentTotals?.received ?? 0,
         pendingBalance: pending?.balance ?? 0,
-        totalExpenses: supplierPaid - supplierRefunded + otherExpenses,
-        supplierPaid,
-        supplierRefunded,
-        otherExpenses,
+        totalExpenses,
       });
     } catch {
       Alert.alert('Error', 'Could not load dashboard totals.');
@@ -223,86 +168,11 @@ export default function HomeScreen() {
   }, [db]);
 
 
-  const loadDailyData = useCallback(async () => {
-    let start: string | null = null;
-    let end: string | null = null;
-
-    if (period === 'TODAY') start = daysAgo(0);
-    else if (period === '7D') start = daysAgo(6);
-    else if (period === '30D') start = daysAgo(29);
-    else if (period === 'CUSTOM') {
-      start = fromDate || null;
-      end = toDate || null;
-    }
-
-    try {
-      // Bookings are counted on the day they were created (the booking number
-      // holds its creation time); older ones fall back to the journey date.
-      const rows = await db.getAllAsync<DayRow>(
-        `SELECT
-           day,
-           SUM(bookings) AS bookings,
-           SUM(received) AS received,
-           SUM(refunds) AS refunds,
-           SUM(expenses) AS expenses
-         FROM (
-           SELECT
-             date(payment_date, 'localtime') AS day,
-             0 AS bookings,
-             CASE WHEN payment_type = 'CUSTOMER_PAYMENT'
-                  THEN amount_paise ELSE 0 END AS received,
-             CASE WHEN payment_type = 'CUSTOMER_REFUND'
-                  THEN amount_paise ELSE 0 END AS refunds,
-             CASE payment_type
-               WHEN 'SUPPLIER_PAYMENT' THEN amount_paise
-               WHEN 'SUPPLIER_REFUND' THEN -amount_paise
-               ELSE 0 END AS expenses
-           FROM payments
-           UNION ALL
-           SELECT
-             COALESCE(
-               CASE WHEN booking_number GLOB 'BK-[0-9]*'
-                    THEN date(CAST(substr(booking_number, 4) AS INTEGER) / 1000,
-                              'unixepoch', 'localtime') END,
-               date(journey_at)
-             ) AS day,
-             1, 0, 0, 0
-           FROM bookings
-         )
-         WHERE day IS NOT NULL
-           AND (? IS NULL OR day >= ?)
-           AND (? IS NULL OR day <= ?)
-         GROUP BY day
-         ORDER BY day DESC`,
-        start,
-        start,
-        end,
-        end,
-      );
-
-      setDayRows(rows);
-    } catch (error) {
-      console.error('Failed to load date-wise data:', error);
-      Alert.alert('Error', 'Could not load date-wise data.');
-    }
-  }, [db, period, fromDate, toDate]);
-
   useFocusEffect(
     useCallback(() => {
       void loadCustomers();
       void loadDashboardStats();
-      void loadDailyData();
-    }, [loadCustomers, loadDashboardStats, loadDailyData]),
-  );
-
-  const periodTotals = dayRows.reduce(
-    (total, row) => ({
-      bookings: total.bookings + row.bookings,
-      received: total.received + row.received,
-      refunds: total.refunds + row.refunds,
-      expenses: total.expenses + row.expenses,
-    }),
-    { bookings: 0, received: 0, refunds: 0, expenses: 0 },
+    }, [loadCustomers, loadDashboardStats]),
   );
 
   function resetForm() {
@@ -382,16 +252,16 @@ export default function HomeScreen() {
         </Text>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>TOTAL BOOKINGS</Text>
-          <Text style={styles.summaryValue}>{stats.totalBookings}</Text>
+          <Text style={styles.summaryLabel}>TOTAL CUSTOMERS</Text>
+          <Text style={styles.summaryValue}>{customerCount}</Text>
           <Text style={styles.summaryHint}>
-            Bookings saved on this device
+            Customers saved on this device
           </Text>
         </View>
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Text style={styles.statLabel}>TOTAL CUSTOMERS</Text>
-            <Text style={styles.statValue}>{customerCount}</Text>
+            <Text style={styles.statLabel}>TOTAL BOOKINGS</Text>
+            <Text style={styles.statValue}>{stats.totalBookings}</Text>
           </View>
 
           <View style={styles.statCard}>
@@ -406,22 +276,7 @@ export default function HomeScreen() {
 
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>TOTAL EXPENSES</Text>
-            <Text style={[styles.statMoney, styles.expenseMoney]}>
-              {formatRupees(stats.totalExpenses)}
-            </Text>
-            <Text style={styles.statBreakdown}>
-              Supplier paid {formatRupees(stats.supplierPaid)}
-            </Text>
-            {stats.supplierRefunded > 0 ? (
-              <Text style={styles.statBreakdown}>
-                Refunds −{formatRupees(stats.supplierRefunded)}
-              </Text>
-            ) : null}
-            {stats.otherExpenses > 0 ? (
-              <Text style={styles.statBreakdown}>
-                Other {formatRupees(stats.otherExpenses)}
-              </Text>
-            ) : null}
+            <Text style={styles.statMoney}>{formatRupees(stats.totalExpenses)}</Text>
           </View>
         </View>
 
@@ -453,132 +308,34 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.bookingsButtonArrow}>›</Text>
         </Pressable>
-
-
-        <View style={styles.dailySection}>
-          <Text style={styles.sectionTitle}>Date-wise summary</Text>
-          <Text style={styles.dailySubtitle}>
-            Bookings, money in and expenses for each day
-          </Text>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.periodRow}
-          >
-            {PERIODS.map((item) => (
-              <Pressable
-                key={item.value}
-                style={[
-                  styles.periodChip,
-                  period === item.value && styles.periodChipActive,
-                ]}
-                onPress={() => setPeriod(item.value)}
-              >
-                <Text
-                  style={[
-                    styles.periodChipText,
-                    period === item.value && styles.periodChipTextActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-
-          {period === 'CUSTOM' ? (
-            <View style={styles.customRange}>
-              <View style={styles.customRangeField}>
-                <Text style={styles.rangeLabel}>From</Text>
-                <DateField
-                  value={fromDate}
-                  onChange={setFromDate}
-                  placeholder="Start date"
-                  allowClear
-                />
-              </View>
-              <View style={styles.customRangeField}>
-                <Text style={styles.rangeLabel}>To</Text>
-                <DateField
-                  value={toDate}
-                  onChange={setToDate}
-                  placeholder="End date"
-                  allowClear
-                />
-              </View>
-            </View>
-          ) : null}
-
-          <View style={styles.periodTotals}>
-            <View style={styles.periodTotalItem}>
-              <Text style={styles.dayLabel}>Bookings</Text>
-              <Text style={styles.periodTotalValue}>{periodTotals.bookings}</Text>
-            </View>
-            <View style={styles.periodTotalItem}>
-              <Text style={styles.dayLabel}>Received</Text>
-              <Text style={styles.periodTotalValue}>
-                {formatRupees(periodTotals.received - periodTotals.refunds)}
-              </Text>
-            </View>
-            <View style={styles.periodTotalItem}>
-              <Text style={styles.dayLabel}>Expenses</Text>
-              <Text style={[styles.periodTotalValue, styles.expenseMoney]}>
-                {formatRupees(periodTotals.expenses)}
-              </Text>
-            </View>
+        <Pressable
+          style={styles.bookingsButton}
+          onPress={() => router.push('/operating-expenses')}
+        >
+          <View style={styles.bookingsButtonTextContainer}>
+            <Text style={styles.bookingsButtonTitle}>
+              Operating Expenses
+            </Text>
+            <Text style={styles.bookingsButtonSubtitle}>
+              Manage rent, salaries, travel, electricity and other expenses
+            </Text>
           </View>
-
-          {dayRows.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No activity in this period</Text>
-              <Text style={styles.emptyText}>
-                Try a longer period or a different date range.
-              </Text>
-            </View>
-          ) : (
-            dayRows.map((row) => {
-              const net = row.received - row.refunds - row.expenses;
-              return (
-                <View key={row.day} style={styles.dayCard}>
-                  <View style={styles.dayHeader}>
-                    <Text style={styles.dayTitle}>{displayDay(row.day)}</Text>
-                    <Text
-                      style={[
-                        styles.dayNet,
-                        net < 0 && styles.dayNetNegative,
-                      ]}
-                    >
-                      Net {net < 0 ? '−' : ''}
-                      {formatRupees(Math.abs(net))}
-                    </Text>
-                  </View>
-
-                  <View style={styles.dayGrid}>
-                    <View style={styles.dayCell}>
-                      <Text style={styles.dayLabel}>Bookings</Text>
-                      <Text style={styles.dayValue}>{row.bookings}</Text>
-                    </View>
-                    <View style={styles.dayCell}>
-                      <Text style={styles.dayLabel}>Received</Text>
-                      <Text style={styles.dayValue}>{formatRupees(row.received)}</Text>
-                    </View>
-                    <View style={styles.dayCell}>
-                      <Text style={styles.dayLabel}>Refunds</Text>
-                      <Text style={styles.dayValue}>{formatRupees(row.refunds)}</Text>
-                    </View>
-                    <View style={styles.dayCell}>
-                      <Text style={styles.dayLabel}>Expenses</Text>
-                      <Text style={[styles.dayValue, styles.expenseMoney]}>
-                        {formatRupees(row.expenses)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
+          <Text style={styles.bookingsButtonArrow}>›</Text>
+        </Pressable>
+        <Pressable
+          style={styles.bookingsButton}
+          onPress={() => router.push('/expense-reports')}
+        >
+          <View style={styles.bookingsButtonTextContainer}>
+            <Text style={styles.bookingsButtonTitle}>
+              Expense Reports
+            </Text>
+            <Text style={styles.bookingsButtonSubtitle}>
+              View monthly charts and expense breakdowns
+            </Text>
+          </View>
+          <Text style={styles.bookingsButtonArrow}>›</Text>
+        </Pressable>
 
         <View style={styles.sectionHeader}>
           <View>
@@ -1118,126 +875,5 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
-  },
-  expenseMoney: {
-    color: '#B42318',
-  },
-  statBreakdown: {
-    color: colors.muted,
-    fontSize: 10,
-    marginTop: 4,
-  },
-  dailySection: {
-    marginBottom: 28,
-  },
-  dailySubtitle: {
-    color: colors.muted,
-    fontSize: 12,
-    marginTop: -10,
-    marginBottom: 14,
-  },
-  periodRow: {
-    gap: 8,
-    paddingBottom: 14,
-  },
-  periodChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  periodChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  periodChipText: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  periodChipTextActive: {
-    color: '#FFFFFF',
-  },
-  customRange: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
-  },
-  customRangeField: {
-    flex: 1,
-  },
-  rangeLabel: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  periodTotals: {
-    flexDirection: 'row',
-    backgroundColor: colors.primaryLight,
-    borderRadius: 13,
-    padding: 14,
-    marginBottom: 12,
-    gap: 8,
-  },
-  periodTotalItem: {
-    flex: 1,
-  },
-  periodTotalValue: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  dayCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 13,
-    padding: 14,
-    marginBottom: 10,
-  },
-  dayHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  dayTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-    flexShrink: 1,
-  },
-  dayNet: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  dayNetNegative: {
-    color: '#B42318',
-  },
-  dayGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 10,
-  },
-  dayCell: {
-    width: '50%',
-  },
-  dayLabel: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  dayValue: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 3,
   },
 });
