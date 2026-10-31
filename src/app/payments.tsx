@@ -624,4 +624,18 @@ const styles = StyleSheet.create({
   outgoingAmount: { color: colors.danger },
   paymentNote: { color: colors.muted, fontSize: 12, marginTop: 8 },
   footer: { color: colors.muted, fontSize: 11, textAlign: 'center', marginTop: 22 },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+
+  homeButton: {
+    padding: 6,
+  },
+  back: {
+    fontSize: 16,
+    color: '#2563eb',
+    fontWeight: '600',
+  },
 });

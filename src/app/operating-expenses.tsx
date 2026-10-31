@@ -877,4 +877,18 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   disabledButton: { opacity: 0.6 },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+
+  homeButton: {
+    padding: 6,
+  },
+  back: {
+    fontSize: 16,
+    color: '#2563eb',
+    fontWeight: '600',
+  },
 });

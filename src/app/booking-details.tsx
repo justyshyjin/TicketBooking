@@ -928,5 +928,19 @@ const styles = StyleSheet.create({
   },
   statusOptionTextActive: {
     color: '#FFFFFF',
-  }
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+
+  homeButton: {
+    padding: 6,
+  },
+  back: {
+    fontSize: 16,
+    color: '#2563eb',
+    fontWeight: '600',
+  },
 });

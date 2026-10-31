@@ -370,4 +370,18 @@ const styles = StyleSheet.create({
     },
     buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
     disabled: { opacity: 0.6 },
+    headerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 18,
+    },
+
+    homeButton: {
+        padding: 6,
+    },
+    back: {
+        fontSize: 16,
+        color: '#2563eb',
+        fontWeight: '600',
+    },
 });
