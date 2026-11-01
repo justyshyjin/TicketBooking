@@ -1,12 +1,22 @@
 
-import { useCallback, useState } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+} from 'react';
+
 import { router, useFocusEffect } from 'expo-router';
+
 import {
     Alert,
+    Animated,
+    Easing,
     Pressable,
     Platform,
     SafeAreaView,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Text,
     TextInput,
@@ -42,13 +52,28 @@ type CategoryTotal = {
 const colors = {
     background: '#F5F7FA',
     surface: '#FFFFFF',
+
     primary: '#176B55',
-    light: '#E5F4EE',
+    primaryDark: '#105440',
+    primaryLight: '#E5F4EE',
+
     text: '#172B27',
     muted: '#6B7B76',
+
     border: '#E0E8E4',
+
     orange: '#D97706',
-    red: '#DC2626',
+    orangeLight: '#FFF4E5',
+
+    red: '#B42318',
+    redLight: '#FDECEC',
+
+    blue: '#245BC7',
+    blueLight: '#EAF1FF',
+
+    white: '#FFFFFF',
+
+    shadow: '#102A23',
 };
 
 const today = new Date();
@@ -94,6 +119,51 @@ export default function ExpenseReportsScreen() {
     const [records, setRecords] = useState<ExpenseRecord[]>([]);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
+
+    // Screen entrance animation
+    const screenOpacity = useRef(
+        new Animated.Value(0)
+    ).current;
+
+    const screenTranslate = useRef(
+        new Animated.Value(22)
+    ).current;
+
+    // Monthly chart animation
+    const chartProgress = useRef(
+        new Animated.Value(0)
+    ).current;
+
+    // Animate screen entrance
+    useEffect(() => {
+        Animated.parallel([
+            Animated.timing(screenOpacity, {
+                toValue: 1,
+                duration: 550,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+            }),
+
+            Animated.timing(screenTranslate, {
+                toValue: 0,
+                duration: 550,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, [screenOpacity, screenTranslate]);
+
+    // Animate chart whenever report data changes
+    useEffect(() => {
+        chartProgress.setValue(0);
+
+        Animated.timing(chartProgress, {
+            toValue: 1,
+            duration: 850,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: false,
+        }).start();
+    }, [monthly, chartProgress]);
 
     const loadReport = useCallback(async () => {
         if (
@@ -535,216 +605,241 @@ export default function ExpenseReportsScreen() {
 
     return (
         <SafeAreaView style={styles.safe}>
-            <ScrollView contentContainerStyle={styles.container}>
-                <View style={styles.headerButtons}>
-                    <Pressable
-                        onPress={() => router.replace('/')}
-                        style={styles.homeButton}
-                    >
-                        <Ionicons name="home" size={22} color="#2563eb" />
-                    </Pressable>
-                    <Pressable onPress={() => router.back()}>
-                        <Text style={styles.back}>‹ Back</Text>
-                    </Pressable>
-                </View>
+            <StatusBar
+                barStyle="dark-content"
+                backgroundColor={colors.background}
+            />
 
-                <Text style={styles.heading}>Expense Reports</Text>
-                <Text style={styles.subtitle}>
-                    Business expense analysis and monthly reports
-                </Text>
-
-                <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>Date Range</Text>
-
-                    <View style={styles.dateRow}>
-                        <View style={styles.dateField}>
-                            <Text style={styles.label}>From date</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={fromDate}
-                                onChangeText={setFromDate}
-                                placeholder="YYYY-MM-DD"
-                                autoCapitalize="none"
-                            />
-                        </View>
-
-                        <View style={styles.dateField}>
-                            <Text style={styles.label}>To date</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={toDate}
-                                onChangeText={setToDate}
-                                placeholder="YYYY-MM-DD"
-                                autoCapitalize="none"
-                            />
-                        </View>
-                    </View>
-
-                    <View style={styles.presetRow}>
-                        {[
-                            ['THIS_MONTH', 'This month'],
-                            ['LAST_MONTH', 'Last month'],
-                            ['THREE_MONTHS', '3 months'],
-                            ['THIS_YEAR', 'This year'],
-                        ].map(([key, label]) => (
-                            <Pressable
-                                key={key}
-                                style={styles.preset}
-                                onPress={() => applyPreset(key)}
-                            >
-                                <Text style={styles.presetText}>{label}</Text>
-                            </Pressable>
-                        ))}
-                    </View>
-
-                    <Pressable style={styles.applyButton} onPress={loadReport}>
-                        <Text style={styles.applyText}>
-                            {loading ? 'Loading...' : 'Apply Date Filter'}
-                        </Text>
-                    </Pressable>
-                    <View style={styles.exportRow}>
+            <ScrollView
+                contentContainerStyle={styles.container}
+                showsVerticalScrollIndicator={false}
+            >
+                <Animated.View
+                    style={{
+                        opacity: screenOpacity,
+                        transform: [{ translateY: screenTranslate }],
+                    }}
+                >
+                    <View style={styles.headerButtons}>
                         <Pressable
-                            style={[styles.exportButton, exporting && { opacity: 0.5 }]}
-                            onPress={exportPDF}
-                            disabled={exporting || loading}
+                            onPress={() => router.replace('/')}
+                            style={styles.homeButton}
                         >
-                            <Text style={styles.exportButtonText}>
-                                {exporting ? 'Exporting...' : 'Export PDF'}
-                            </Text>
+                            <Ionicons name="home" size={22} color="#2563eb" />
                         </Pressable>
-
-                        <Pressable
-                            style={[
-                                styles.exportButton,
-                                styles.excelButton,
-                                exporting && { opacity: 0.5 },
-                            ]}
-                            onPress={exportExcel}
-                            disabled={exporting || loading}
-                        >
-                            <Text style={styles.exportButtonText}>
-                                {exporting ? 'Exporting...' : 'Export Excel'}
-                            </Text>
+                        <Pressable onPress={() => router.back()}>
+                            <Text style={styles.back}>‹ Back</Text>
                         </Pressable>
                     </View>
-                </View>
 
-                <View style={styles.totalCard}>
-                    <Text style={styles.totalLabel}>TOTAL EXPENSES</Text>
-                    <Text style={styles.totalValue}>{money(totalExpenses)}</Text>
-                    <Text style={styles.totalHint}>
-                        Supplier payments − refunds + paid operating expenses
+                    <Text style={styles.heading}>Expense Reports</Text>
+                    <Text style={styles.subtitle}>
+                        Business expense analysis and monthly reports
                     </Text>
-                </View>
 
-                <Text style={styles.sectionHeading}>Expense Summary</Text>
+                    <View style={styles.card}>
+                        <Text style={styles.sectionTitle}>Date Range</Text>
 
-                <View style={styles.card}>
-                    <SummaryRow label="Supplier payments" value={money(supplierPayments)} />
-                    <SummaryRow
-                        label="Supplier refunds"
-                        value={`−${money(supplierRefunds)}`}
-                        color={colors.red}
-                    />
-                    <SummaryRow label="Paid operating expenses" value={money(paidOperating)} />
-                    <SummaryRow
-                        label="Pending operating expenses"
-                        value={money(pendingOperating)}
-                        color={colors.orange}
-                    />
-                </View>
-
-                <Text style={styles.sectionHeading}>Monthly Expense Chart</Text>
-
-                <View style={styles.card}>
-                    {monthly.length === 0 ? (
-                        <Text style={styles.empty}>No monthly expenses in this period.</Text>
-                    ) : (
-                        monthly.map((item) => (
-                            <View key={item.month} style={styles.chartItem}>
-                                <View style={styles.chartHeader}>
-                                    <Text style={styles.chartMonth}>{monthLabel(item.month)}</Text>
-                                    <Text style={styles.chartAmount}>{money(item.total)}</Text>
-                                </View>
-                                <View style={styles.barBackground}>
-                                    <View
-                                        style={[
-                                            styles.bar,
-                                            {
-                                                width: `${Math.max(
-                                                    1,
-                                                    (Math.abs(item.total) / maxMonthly) * 100,
-                                                )}%`,
-                                            },
-                                        ]}
-                                    />
-                                </View>
+                        <View style={styles.dateRow}>
+                            <View style={styles.dateField}>
+                                <Text style={styles.label}>From date</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={fromDate}
+                                    onChangeText={setFromDate}
+                                    placeholder="YYYY-MM-DD"
+                                    autoCapitalize="none"
+                                />
                             </View>
-                        ))
-                    )}
-                </View>
 
-                <Text style={styles.sectionHeading}>Category Breakdown</Text>
+                            <View style={styles.dateField}>
+                                <Text style={styles.label}>To date</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={toDate}
+                                    onChangeText={setToDate}
+                                    placeholder="YYYY-MM-DD"
+                                    autoCapitalize="none"
+                                />
+                            </View>
+                        </View>
 
-                <View style={styles.card}>
-                    {categories.length === 0 ? (
-                        <Text style={styles.empty}>No paid operating expenses found.</Text>
-                    ) : (
-                        categories.map((item) => (
-                            <SummaryRow
-                                key={item.category}
-                                label={item.category.replace(/_/g, ' ')}
-                                value={money(item.total)}
-                            />
-                        ))
-                    )}
-                </View>
+                        <View style={styles.presetRow}>
+                            {[
+                                ['THIS_MONTH', 'This month'],
+                                ['LAST_MONTH', 'Last month'],
+                                ['THREE_MONTHS', '3 months'],
+                                ['THIS_YEAR', 'This year'],
+                            ].map(([key, label]) => (
+                                <Pressable
+                                    key={key}
+                                    style={({ pressed }) => [
+                                        styles.preset,
+                                        pressed && styles.buttonPressed,
+                                    ]}
+                                    onPress={() => applyPreset(key)}
+                                >
+                                    <Text style={styles.presetText}>{label}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
 
-                <Text style={styles.sectionHeading}>Date-wise Expense Records</Text>
-
-                <View style={styles.card}>
-                    {records.length === 0 ? (
-                        <Text style={styles.empty}>No expenses found for this date range.</Text>
-                    ) : (
-                        records.map((item, index) => (
-                            <View
-                                key={`${item.expense_type}-${item.id}-${index}`}
-                                style={styles.record}
+                        <Pressable style={styles.applyButton} onPress={loadReport}>
+                            <Text style={styles.applyText}>
+                                {loading ? 'Loading...' : 'Apply Date Filter'}
+                            </Text>
+                        </Pressable>
+                        <View style={styles.exportRow}>
+                            <Pressable
+                                style={[styles.exportButton, exporting && { opacity: 0.5 }]}
+                                onPress={exportPDF}
+                                disabled={exporting || loading}
                             >
-                                <View style={styles.recordTop}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.recordTitle}>{item.description}</Text>
-                                        <Text style={styles.recordMeta}>
-                                            {item.expense_date} · {item.category}
-                                        </Text>
+                                <Text style={styles.exportButtonText}>
+                                    {exporting ? 'Exporting...' : 'Export PDF'}
+                                </Text>
+                            </Pressable>
+
+                            <Pressable
+                                style={[
+                                    styles.exportButton,
+                                    styles.excelButton,
+                                    exporting && { opacity: 0.5 },
+                                ]}
+                                onPress={exportExcel}
+                                disabled={exporting || loading}
+                            >
+                                <Text style={styles.exportButtonText}>
+                                    {exporting ? 'Exporting...' : 'Export Excel'}
+                                </Text>
+                            </Pressable>
+                        </View>
+                    </View>
+
+                    <View style={styles.totalCard}>
+                        <Text style={styles.totalLabel}>TOTAL EXPENSES</Text>
+                        <Text style={styles.totalValue}>{money(totalExpenses)}</Text>
+                        <Text style={styles.totalHint}>
+                            Supplier payments − refunds + paid operating expenses
+                        </Text>
+                    </View>
+
+                    <Text style={styles.sectionHeading}>Expense Summary</Text>
+
+                    <View style={styles.card}>
+                        <SummaryRow label="Supplier payments" value={money(supplierPayments)} />
+                        <SummaryRow
+                            label="Supplier refunds"
+                            value={`−${money(supplierRefunds)}`}
+                            color={colors.red}
+                        />
+                        <SummaryRow label="Paid operating expenses" value={money(paidOperating)} />
+                        <SummaryRow
+                            label="Pending operating expenses"
+                            value={money(pendingOperating)}
+                            color={colors.orange}
+                        />
+                    </View>
+
+                    <Text style={styles.sectionHeading}>Monthly Expense Chart</Text>
+
+                    <View style={styles.card}>
+                        {monthly.length === 0 ? (
+                            <Text style={styles.empty}>No monthly expenses in this period.</Text>
+                        ) : (
+                            monthly.map((item) => (
+                                <View key={item.month} style={styles.chartItem}>
+                                    <View style={styles.chartHeader}>
+                                        <Text style={styles.chartMonth}>{monthLabel(item.month)}</Text>
+                                        <Text style={styles.chartAmount}>{money(item.total)}</Text>
+                                    </View>
+                                    <View style={styles.barBackground}>
+                                        <Animated.View
+                                            style={[
+                                                styles.bar,
+                                                {
+                                                    width: chartProgress.interpolate({
+                                                        inputRange: [0, 1],
+                                                        outputRange: [
+                                                            '0%',
+                                                            `${Math.max(
+                                                                1,
+                                                                (Math.abs(item.total) / maxMonthly) * 100,
+                                                            )}%`,
+                                                        ],
+                                                    }),
+                                                },
+                                            ]}
+                                        />
+                                    </View>
+                                </View>
+                            ))
+                        )}
+                    </View>
+
+                    <Text style={styles.sectionHeading}>Category Breakdown</Text>
+
+                    <View style={styles.card}>
+                        {categories.length === 0 ? (
+                            <Text style={styles.empty}>No paid operating expenses found.</Text>
+                        ) : (
+                            categories.map((item) => (
+                                <SummaryRow
+                                    key={item.category}
+                                    label={item.category.replace(/_/g, ' ')}
+                                    value={money(item.total)}
+                                />
+                            ))
+                        )}
+                    </View>
+
+                    <Text style={styles.sectionHeading}>Date-wise Expense Records</Text>
+
+                    <View style={styles.card}>
+                        {records.length === 0 ? (
+                            <Text style={styles.empty}>No expenses found for this date range.</Text>
+                        ) : (
+                            records.map((item, index) => (
+                                <View
+                                    key={`${item.expense_type}-${item.id}-${index}`}
+                                    style={styles.record}
+                                >
+                                    <View style={styles.recordTop}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.recordTitle}>{item.description}</Text>
+                                            <Text style={styles.recordMeta}>
+                                                {item.expense_date} · {item.category}
+                                            </Text>
+                                            <Text
+                                                style={[
+                                                    styles.status,
+                                                    item.status === 'PENDING'
+                                                        ? styles.pending
+                                                        : styles.paid,
+                                                ]}
+                                            >
+                                                {item.status}
+                                            </Text>
+                                        </View>
+
                                         <Text
                                             style={[
-                                                styles.status,
-                                                item.status === 'PENDING'
-                                                    ? styles.pending
-                                                    : styles.paid,
+                                                styles.recordAmount,
+                                                item.amount_paise < 0 && { color: colors.red },
                                             ]}
                                         >
-                                            {item.status}
+                                            {item.amount_paise < 0 ? '−' : ''}
+                                            {money(Math.abs(item.amount_paise))}
                                         </Text>
                                     </View>
-
-                                    <Text
-                                        style={[
-                                            styles.recordAmount,
-                                            item.amount_paise < 0 && { color: colors.red },
-                                        ]}
-                                    >
-                                        {item.amount_paise < 0 ? '−' : ''}
-                                        {money(Math.abs(item.amount_paise))}
-                                    </Text>
                                 </View>
-                            </View>
-                        ))
-                    )}
-                </View>
+                            ))
+                        )}
+                    </View>
+
+                </Animated.View>
             </ScrollView>
-        </SafeAreaView>
+        </SafeAreaView >
     );
 }
 
@@ -772,120 +867,157 @@ const styles = StyleSheet.create({
     },
     container: {
         padding: 18,
-        paddingBottom: 40,
+        paddingBottom: 45,
     },
     back: {
         color: colors.primary,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '700',
-        marginBottom: 18,
     },
     heading: {
         color: colors.text,
-        fontSize: 28,
+        fontSize: 27,
         fontWeight: '800',
+        letterSpacing: -0.7,
     },
     subtitle: {
         color: colors.muted,
-        fontSize: 14,
-        marginTop: 5,
-        marginBottom: 20,
+        fontSize: 13,
+        marginTop: 6,
+        marginBottom: 22,
+        lineHeight: 20,
     },
     card: {
         backgroundColor: colors.surface,
-        borderRadius: 14,
-        padding: 16,
-        marginBottom: 18,
+        borderRadius: 18,
+        padding: 17,
+        marginBottom: 19,
         borderWidth: 1,
         borderColor: colors.border,
+
+        elevation: 2,
+
+        shadowColor: colors.shadow,
+        shadowOffset: {
+            width: 0,
+            height: 3,
+        },
+        shadowOpacity: 0.045,
+        shadowRadius: 8,
     },
     sectionTitle: {
         color: colors.text,
         fontSize: 17,
-        fontWeight: '700',
-        marginBottom: 12,
+        fontWeight: '800',
+        marginBottom: 15,
     },
+    sectionHeading: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: colors.text,
+        marginBottom: 13,
+        letterSpacing: -0.3,
+    },
+
     dateRow: {
         flexDirection: 'row',
         gap: 10,
     },
+
     dateField: {
         flex: 1,
     },
+
     label: {
         color: colors.muted,
         fontSize: 12,
-        marginBottom: 6,
+        fontWeight: '600',
+        marginBottom: 7,
     },
     input: {
+        backgroundColor: colors.background,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: 8,
-        padding: 10,
+        borderRadius: 11,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
         color: colors.text,
         fontSize: 13,
     },
+
     presetRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 7,
-        marginTop: 14,
+        gap: 8,
+        marginTop: 16,
     },
+
     preset: {
-        backgroundColor: colors.light,
-        paddingVertical: 8,
-        paddingHorizontal: 10,
-        borderRadius: 7,
+        backgroundColor: colors.primaryLight,
+        paddingVertical: 9,
+        paddingHorizontal: 12,
+        borderRadius: 10,
     },
+
     presetText: {
         color: colors.primary,
         fontSize: 12,
-        fontWeight: '600',
-    },
-    applyButton: {
+        fontWeight: '700',
+    }, applyButton: {
         backgroundColor: colors.primary,
-        borderRadius: 9,
-        padding: 13,
+        borderRadius: 12,
+        padding: 15,
         alignItems: 'center',
-        marginTop: 15,
+        marginTop: 17,
+        elevation: 2,
     },
     applyText: {
-        color: '#FFFFFF',
-        fontWeight: '700',
+        color: colors.white,
+        fontWeight: '800',
+        fontSize: 14,
     },
     totalCard: {
         backgroundColor: colors.primary,
-        padding: 20,
-        borderRadius: 15,
-        marginBottom: 22,
+        padding: 22,
+        borderRadius: 20,
+        marginBottom: 24,
+        elevation: 4,
+        shadowColor: colors.primary,
+        shadowOffset: {
+            width: 0,
+            height: 5,
+        },
+        shadowOpacity: 0.17,
+        shadowRadius: 10,
     },
+
     totalLabel: {
         color: '#D8EEE6',
         fontSize: 12,
-        fontWeight: '700',
-    },
-    totalValue: {
-        color: '#FFFFFF',
-        fontSize: 30,
         fontWeight: '800',
-        marginTop: 8,
+        letterSpacing: 1,
     },
+
+    totalValue: {
+        color: colors.white,
+        fontSize: 31,
+        fontWeight: '900',
+        marginTop: 10,
+    },
+
     totalHint: {
         color: '#D8EEE6',
         fontSize: 11,
-        marginTop: 8,
+        marginTop: 9,
+        lineHeight: 17,
     },
-    sectionHeading: {
-        fontSize: 19,
-        fontWeight: '800',
-        color: colors.text,
-        marginBottom: 12,
-    },
+
     summaryRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        alignItems: 'center',
         gap: 10,
-        paddingVertical: 11,
+        paddingVertical: 13,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
     },
@@ -894,108 +1026,137 @@ const styles = StyleSheet.create({
         fontSize: 13,
         flex: 1,
     },
+
     summaryValue: {
         fontSize: 13,
-        fontWeight: '700',
+        fontWeight: '800',
     },
+
     empty: {
         color: colors.muted,
         textAlign: 'center',
-        paddingVertical: 18,
+        paddingVertical: 22,
+        fontSize: 13,
     },
+
     chartItem: {
-        marginBottom: 17,
+        marginBottom: 19,
     },
+
     chartHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 7,
+        marginBottom: 9,
     },
+
     chartMonth: {
         color: colors.text,
         fontSize: 13,
-        fontWeight: '600',
+        fontWeight: '700',
     },
+
     chartAmount: {
         color: colors.primary,
         fontSize: 13,
-        fontWeight: '700',
+        fontWeight: '800',
     },
     barBackground: {
-        height: 11,
-        backgroundColor: colors.light,
-        borderRadius: 8,
+        height: 12,
+        backgroundColor: colors.primaryLight,
+        borderRadius: 10,
         overflow: 'hidden',
     },
+
     bar: {
-        height: 11,
+        height: 12,
         backgroundColor: colors.primary,
-        borderRadius: 8,
+        borderRadius: 10,
     },
+
     record: {
-        paddingVertical: 13,
+        paddingVertical: 15,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
     },
+
     recordTop: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
     },
+
     recordTitle: {
         color: colors.text,
         fontSize: 14,
-        fontWeight: '700',
+        fontWeight: '800',
     },
+
     recordMeta: {
         color: colors.muted,
         fontSize: 11,
-        marginTop: 5,
-    },
-    status: {
-        fontSize: 10,
-        fontWeight: '700',
         marginTop: 6,
     },
+
+    status: {
+        fontSize: 10,
+        fontWeight: '800',
+        marginTop: 7,
+    },
+
     paid: {
         color: colors.primary,
     },
+
     pending: {
         color: colors.orange,
     },
+
     recordAmount: {
         color: colors.text,
-        fontWeight: '700',
+        fontWeight: '800',
         fontSize: 13,
     },
     exportRow: {
         flexDirection: 'row',
         gap: 10,
-        marginTop: 12,
+        marginTop: 14,
     },
+
     exportButton: {
         flex: 1,
-        backgroundColor: '#B91C1C',
-        borderRadius: 9,
-        padding: 13,
+        backgroundColor: '#B42318',
+        borderRadius: 12,
+        padding: 14,
         alignItems: 'center',
     },
+
     excelButton: {
-        backgroundColor: '#176B55',
+        backgroundColor: colors.primary,
     },
+
     exportButtonText: {
-        color: '#FFFFFF',
-        fontWeight: '700',
+        color: colors.white,
+        fontWeight: '800',
         fontSize: 13,
     },
+
+    buttonPressed: {
+        opacity: 0.75,
+        transform: [{ scale: 0.97 }],
+    },
+    homeButton: {
+        width: 42,
+        height: 42,
+        borderRadius: 13,
+        backgroundColor: colors.primaryLight,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
     headerButtons: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 18,
+        gap: 14,
+        marginBottom: 18,
     },
-
-    homeButton: {
-        padding: 6,
-    },
-
 });
